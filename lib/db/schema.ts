@@ -86,15 +86,35 @@ export const shoppingItems = pgTable("shopping_items", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-export const shares = pgTable("shares", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id")
-    .notNull()
-    .references(() => events.id, { onDelete: "cascade" }),
-  slug: text("slug").notNull().unique(),
-  role: text("role").notNull().default("family"), // family | caterer | shopper
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const shares = pgTable(
+  "shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull().unique(),
+    role: text("role").notNull().default("family"), // family | caterer | shopper
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  // One live slug per event: concurrent createShareAction calls must not
+  // mint parallel links the UI can never show or revoke.
+  (t) => [uniqueIndex("shares_event_unique_idx").on(t.eventId)],
+);
+
+// Rate limiting counts ATTEMPTS (inserted before the model call), so failed
+// generations burn quota and the check-then-act race fails closed.
+export const generationAttempts = pgTable(
+  "generation_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("generation_attempts_user_time_idx").on(t.userId, t.createdAt)],
+);
 
 export const feedback = pgTable("feedback", {
   id: uuid("id").primaryKey().defaultRandom(),

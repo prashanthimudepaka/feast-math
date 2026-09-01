@@ -12,6 +12,9 @@ const KEYWORDS: [RegExp, DishCat][] = [
   [/biryani/i, "biryani"],
   [/pulihora|tamarind rice|jeera rice|fried rice|bagara|lemon rice/i, "rice_main"],
   [/\brice\b/i, "rice_main"],
+  // Beverages must outrank wet_curry: bare "butter"/"masala" would otherwise
+  // classify Buttermilk and Masala chaas as curries (≈⅓ under-provisioned).
+  [/buttermilk|chaas|coffee|tea|juice|panakam/i, "beverage"],
   [/sambar|rasam|kurma|masala\b|gravy|butter|makhani|stew/i, "wet_curry"],
   [/\bdal\b|pappu/i, "dal"],
   [/curry|sabzi|fry|poriyal|thoran/i, "dry_curry"],
@@ -22,7 +25,6 @@ const KEYWORDS: [RegExp, DishCat][] = [
   [/laddu|jamun|kesari|halwa|sweet|barfi|mysore pak/i, "sweet"],
   [/curd|raita|perugu/i, "curd"],
   [/pickle|papad|chutney|podi/i, "pickle_papad"],
-  [/buttermilk|chaas|coffee|tea|juice|panakam/i, "beverage"],
   [/salad|kosambari/i, "salad"],
 ];
 

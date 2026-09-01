@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { events, menuItems, plans, shoppingItems } from "@/lib/db/schema";
 import { label } from "@/lib/plan/presets";
 import type { ComputedPlan } from "@/lib/plan/types";
+import { isUuid } from "@/lib/validation";
 import { PlanDocument } from "@/components/plan-document";
 import { PrintButton } from "@/components/print-button";
 
@@ -22,6 +23,7 @@ export default async function PrintPlanPage({
   if (!session) redirect("/sign-in");
 
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const [event] = await db
     .select()
     .from(events)

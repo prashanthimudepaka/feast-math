@@ -70,16 +70,18 @@ function parseServeTime(serveTime: string | undefined): number | null {
 function clockLabel(serveMinutes: number | null, minutesBefore: number): string | null {
   if (serveMinutes === null) return null;
   let t = serveMinutes - minutesBefore;
-  let dayBefore = false;
+  let daysBefore = 0;
   while (t < 0) {
     t += 24 * 60;
-    dayBefore = true;
+    daysBefore++;
   }
   const h = Math.floor(t / 60);
   const mm = `${t % 60}`.padStart(2, "0");
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${dayBefore ? "Day before, " : ""}${h12}:${mm} ${ampm}`;
+  const prefix =
+    daysBefore === 0 ? "" : daysBefore === 1 ? "Day before, " : `${daysBefore} days before, `;
+  return `${prefix}${h12}:${mm} ${ampm}`;
 }
 
 function relativeLabel(minutesBefore: number): string {
@@ -112,6 +114,7 @@ export function computePlan(input: EventInput, params: PlanParams): ComputedPlan
     let perAdult = dish.perAdult;
     let clamped = false;
     let confidence = dish.confidence;
+    let unitMismatchNote = "";
     if (anchor && anchor.unit === dish.cookedUnit) {
       if (perAdult < anchor.min || perAdult > anchor.max) {
         perAdult = Math.min(Math.max(perAdult, anchor.min), anchor.max);
@@ -119,8 +122,23 @@ export function computePlan(input: EventInput, params: PlanParams): ComputedPlan
         confidence = "medium";
       }
     } else if (anchor) {
-      // Unit mismatch with the anchor: keep the value but lower confidence.
-      confidence = confidence === "high" ? "medium" : confidence;
+      const massVolume =
+        (anchor.unit === "kg" || anchor.unit === "l") &&
+        (dish.cookedUnit === "kg" || dish.cookedUnit === "l");
+      if (massVolume) {
+        // kg<->l mismatch: cooked-food density ~1, so the numeric anchor
+        // range still applies — clamp rather than leaving it unbounded.
+        if (perAdult < anchor.min || perAdult > anchor.max) {
+          perAdult = Math.min(Math.max(perAdult, anchor.min), anchor.max);
+          clamped = true;
+        }
+        confidence = confidence === "high" ? "medium" : confidence;
+      } else {
+        // count<->mass mismatch: the range can't be applied; keep the value
+        // but flag it loudly instead of silently trusting the model.
+        confidence = "low";
+        unitMismatchNote = ` (unit ${dish.cookedUnit} differs from caterer anchor ${anchor.unit} — verify)`;
+      }
     }
 
     // 2. Deterministic quantity math (Claude never does this part).
@@ -142,7 +160,8 @@ export function computePlan(input: EventInput, params: PlanParams): ComputedPlan
       `${input.kids} kids × ${dish.kidFactor}) × ${appetiteMult} appetite × ` +
       `${styleMult} ${label(input.servingStyle).toLowerCase()} × ${SAFETY_BUFFER} safety ` +
       `= ${round2(raw)} ${dish.cookedUnit} → ${display(value, dish.cookedUnit)}` +
-      (clamped ? ` (rate adjusted to caterer range for ${dish.dishCategory})` : "");
+      (clamped ? ` (rate adjusted to caterer range for ${dish.dishCategory})` : "") +
+      unitMismatchNote;
 
     dishes.push({
       name: dish.name,

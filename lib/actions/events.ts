@@ -4,12 +4,13 @@ import { randomBytes } from "crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, eq, max, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, menuItems, plans, shares, shoppingItems } from "@/lib/db/schema";
 import { eventInputSchema, MENU_CATEGORIES } from "@/lib/plan/types";
+import { isUuid } from "@/lib/validation";
 
 export async function createEventAction(
   raw: unknown,
@@ -64,6 +65,7 @@ export async function toggleShoppingItemAction(
   itemId: string,
   checked: boolean,
 ): Promise<{ ok: boolean }> {
+  if (!isUuid(itemId)) return { ok: false };
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false };
 
@@ -96,6 +98,7 @@ async function ownedEventId(
   userId: string,
   eventId: string,
 ): Promise<boolean> {
+  if (!isUuid(eventId)) return false;
   const rows = await db
     .select({ id: events.id })
     .from(events)
@@ -155,6 +158,7 @@ export async function updateMenuItemAction(
   itemId: string,
   raw: unknown,
 ): Promise<{ error?: string }> {
+  if (!isUuid(itemId)) return { error: "Dish not found." };
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { error: "Not signed in." };
 
@@ -169,6 +173,22 @@ export async function updateMenuItemAction(
     .where(and(eq(menuItems.id, itemId), eq(events.userId, session.user.id)))
     .limit(1);
   if (rows.length === 0) return { error: "Dish not found." };
+
+  // Same duplicate guard as add — a rename must not collide with another
+  // dish (double React keys, double-counted quantities). Excluding the row
+  // itself keeps case-only renames and no-op saves working.
+  const dup = await db
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(
+      and(
+        eq(menuItems.eventId, rows[0].eventId),
+        sql`lower(${menuItems.name}) = lower(${parsed.data.name})`,
+        ne(menuItems.id, itemId),
+      ),
+    )
+    .limit(1);
+  if (dup.length > 0) return { error: "That dish is already on the menu." };
 
   await db
     .update(menuItems)
@@ -185,6 +205,7 @@ export async function updateMenuItemAction(
 export async function deleteMenuItemAction(
   itemId: string,
 ): Promise<{ error?: string }> {
+  if (!isUuid(itemId)) return { error: "Dish not found." };
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { error: "Not signed in." };
 
@@ -218,10 +239,28 @@ export async function createShareAction(
     .limit(1);
   if (existing.length > 0) return { slug: existing[0].slug };
 
+  // Unique index on eventId + conflict-safe insert: a double-click race
+  // yields one slug, never two live links the UI can't see or revoke.
   const slug = randomBytes(9).toString("base64url");
-  await db.insert(shares).values({ eventId, slug, role: "family" });
+  const inserted = await db
+    .insert(shares)
+    .values({ eventId, slug, role: "family" })
+    .onConflictDoNothing({ target: shares.eventId })
+    .returning({ slug: shares.slug });
+  if (inserted.length === 0) {
+    const winner = await db
+      .select({ slug: shares.slug })
+      .from(shares)
+      .where(eq(shares.eventId, eventId))
+      .limit(1);
+    if (winner.length > 0) {
+      revalidatePath(`/dashboard/events/${eventId}`);
+      return { slug: winner[0].slug };
+    }
+    return { error: "Could not create the link. Please try again." };
+  }
   revalidatePath(`/dashboard/events/${eventId}`);
-  return { slug };
+  return { slug: inserted[0].slug };
 }
 
 export async function revokeShareAction(

@@ -149,7 +149,11 @@ export async function generatePlanParams(
           input_schema: TOOL_INPUT_SCHEMA,
         },
       ],
-      tool_choice: { type: "tool", name: "submit_plan_parameters" },
+      tool_choice: {
+        type: "tool",
+        name: "submit_plan_parameters",
+        disable_parallel_tool_use: true,
+      },
     });
 
     const toolUse = message.content.find((b) => b.type === "tool_use");
@@ -158,13 +162,30 @@ export async function generatePlanParams(
       continue;
     }
     const parsed = planParamsSchema.safeParse(toolUse.input);
-    if (parsed.success) {
-      return { params: parsed.data, model: PLAN_MODEL };
+    if (!parsed.success) {
+      lastError = parsed.error.issues
+        .slice(0, 5)
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ");
+      continue;
     }
-    lastError = parsed.error.issues
-      .slice(0, 5)
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("; ");
+
+    // Reconcile against the menu: every dish exactly once, no inventions.
+    const menuNames = new Set(input.menu.map((m) => m.name.trim().toLowerCase()));
+    const dishNames = parsed.data.dishes.map((d) => d.name.trim().toLowerCase());
+    const dishSet = new Set(dishNames);
+    const missing = [...menuNames].filter((n) => !dishSet.has(n));
+    const extra = dishNames.filter((n) => !menuNames.has(n));
+    const hasDuplicates = dishNames.length !== dishSet.size;
+    if (missing.length > 0 || extra.length > 0 || hasDuplicates) {
+      lastError =
+        `dishes do not match the menu — missing: [${missing.join(", ")}]; ` +
+        `unexpected: [${extra.join(", ")}]${hasDuplicates ? "; duplicates present" : ""}. ` +
+        `Return exactly one entry per menu dish using the exact given names.`;
+      continue;
+    }
+
+    return { params: parsed.data, model: PLAN_MODEL };
   }
   throw new Error(`The model's plan parameters failed validation: ${lastError}`);
 }

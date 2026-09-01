@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createShareAction, revokeShareAction } from "@/lib/actions/events";
 
 export function ShareControls({
@@ -14,9 +14,14 @@ export function ShareControls({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const shareUrl = existingSlug
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${existingSlug}`
-    : null;
+  // Read the origin after mount — reading window.location during render
+  // makes the server and client HTML disagree (hydration mismatch).
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const shareUrl = existingSlug ? `${origin}/share/${existingSlug}` : null;
 
   async function copy() {
     if (!shareUrl) return;
