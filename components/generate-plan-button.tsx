@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 const LOADING_LINES = [
@@ -21,12 +21,17 @@ export function GeneratePlanButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [lineIndex, setLineIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Spinner stays until the refreshed server data actually renders, then the
+  // button re-enables — otherwise a successful regenerate left it stuck.
+  const working = busy || isPending;
+
   useEffect(() => {
-    if (busy) {
+    if (working) {
       timerRef.current = setInterval(
         () => setLineIndex((i) => (i + 1) % LOADING_LINES.length),
         2600,
@@ -35,7 +40,7 @@ export function GeneratePlanButton({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [busy]);
+  }, [working]);
 
   async function generate() {
     setError(null);
@@ -45,8 +50,8 @@ export function GeneratePlanButton({
         method: "POST",
       });
       if (res.ok) {
-        router.refresh();
-        // Keep the busy state until the refreshed page replaces this view.
+        startTransition(() => router.refresh());
+        setBusy(false); // isPending carries the spinner from here
         return;
       }
       const body = (await res.json().catch(() => null)) as
@@ -72,16 +77,16 @@ export function GeneratePlanButton({
       <button
         type="button"
         onClick={generate}
-        disabled={busy}
+        disabled={working}
         className="rounded-lg bg-amber-700 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-amber-800 disabled:cursor-wait disabled:opacity-80"
       >
-        {busy
+        {working
           ? LOADING_LINES[lineIndex]
           : hasPlan
             ? "Regenerate plan (new version)"
             : "Generate plan"}
       </button>
-      {busy && (
+      {working && (
         <p className="text-xs text-stone-500 dark:text-stone-400">
           This takes 30–60 seconds — the AI caterer is working through your menu
           dish by dish.

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { events, menuItems, plans, shares, shoppingItems } from "@/lib/db/schema";
 import { label } from "@/lib/plan/presets";
 import type { ComputedPlan } from "@/lib/plan/types";
+import { isUuid } from "@/lib/validation";
 import { GeneratePlanButton } from "@/components/generate-plan-button";
 import { MenuEditor } from "@/components/menu-editor";
 import { PlanView } from "@/components/plan-view";
@@ -32,6 +33,7 @@ export default async function EventPage({
   if (!session) redirect("/sign-in");
 
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const [event] = await db
     .select()
     .from(events)

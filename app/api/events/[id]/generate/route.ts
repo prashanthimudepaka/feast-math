@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { and, eq, gte, max, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events, menuItems, plans, shoppingItems } from "@/lib/db/schema";
+import {
+  events,
+  generationAttempts,
+  menuItems,
+  plans,
+  shoppingItems,
+} from "@/lib/db/schema";
+import { isUuid } from "@/lib/validation";
 import { generatePlanParams } from "@/lib/ai/generate-params";
 import { computePlan } from "@/lib/engine/compute";
 import { eventInputSchema, type EventInput } from "@/lib/plan/types";
@@ -18,7 +25,8 @@ export async function POST(
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Mock mode needs no API key — only block real-API mode without one.
+  if (!process.env.ANTHROPIC_API_KEY && process.env.FEAST_MOCK_PLAN !== "1") {
     return NextResponse.json(
       { error: "Plan generation is not configured (missing API key)." },
       { status: 503 },
@@ -26,6 +34,9 @@ export async function POST(
   }
 
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  }
 
   const [event] = await db
     .select()
@@ -48,17 +59,23 @@ export async function POST(
     );
   }
 
-  // Simple daily rate limit per user, across all their events.
+  // Daily rate limit: reserve quota BEFORE the model call by inserting an
+  // attempt row, then counting attempts (own row included). Insert-before-
+  // count fails closed under concurrency — parallel requests can over-block
+  // by one, never over-spend — and failed generations still burn quota.
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
+  await db.insert(generationAttempts).values({ userId: session.user.id });
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(plans)
-    .innerJoin(events, eq(plans.eventId, events.id))
+    .from(generationAttempts)
     .where(
-      and(eq(events.userId, session.user.id), gte(plans.createdAt, startOfDay)),
+      and(
+        eq(generationAttempts.userId, session.user.id),
+        gte(generationAttempts.createdAt, startOfDay),
+      ),
     );
-  if (count >= DAILY_GENERATION_LIMIT) {
+  if (count > DAILY_GENERATION_LIMIT) {
     return NextResponse.json(
       { error: `Daily limit of ${DAILY_GENERATION_LIMIT} plan generations reached. Try again tomorrow.` },
       { status: 429 },
