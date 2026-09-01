@@ -3,12 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events, menuItems, plans, shoppingItems } from "@/lib/db/schema";
+import { events, menuItems, plans, shares, shoppingItems } from "@/lib/db/schema";
 import { label } from "@/lib/plan/presets";
 import type { ComputedPlan } from "@/lib/plan/types";
 import { GeneratePlanButton } from "@/components/generate-plan-button";
 import { MenuEditor } from "@/components/menu-editor";
 import { PlanView } from "@/components/plan-view";
+import { ShareControls } from "@/components/share-controls";
 
 function normalizeMenu(
   list: { name: string; category: string; note?: string | null }[],
@@ -58,6 +59,12 @@ export default async function EventPage({
         .where(eq(shoppingItems.planId, latestPlan.id))
         .orderBy(shoppingItems.sortOrder)
     : [];
+
+  const [share] = await db
+    .select()
+    .from(shares)
+    .where(eq(shares.eventId, event.id))
+    .limit(1);
 
   const snapshotMenu =
     (
@@ -162,6 +169,24 @@ export default async function EventPage({
           <div className="max-w-sm">
             <GeneratePlanButton eventId={event.id} hasPlan={true} />
           </div>
+
+          <section className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 dark:border-stone-800 dark:bg-stone-900">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                Share &amp; print
+              </h2>
+              <a
+                href={`/dashboard/events/${event.id}/print`}
+                className="text-sm font-medium text-amber-700 hover:underline dark:text-amber-500"
+              >
+                🖨️ Print view
+              </a>
+            </div>
+            <ShareControls
+              eventId={event.id}
+              existingSlug={share?.slug ?? null}
+            />
+          </section>
         </>
       )}
     </div>

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -7,7 +8,7 @@ import { and, eq, max, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events, menuItems, plans, shoppingItems } from "@/lib/db/schema";
+import { events, menuItems, plans, shares, shoppingItems } from "@/lib/db/schema";
 import { eventInputSchema, MENU_CATEGORIES } from "@/lib/plan/types";
 
 export async function createEventAction(
@@ -197,5 +198,41 @@ export async function deleteMenuItemAction(
 
   await db.delete(menuItems).where(eq(menuItems.id, itemId));
   revalidatePath(`/dashboard/events/${rows[0].eventId}`);
+  return {};
+}
+
+// ---------- share links ----------
+
+export async function createShareAction(
+  eventId: string,
+): Promise<{ slug?: string; error?: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { error: "Not signed in." };
+  if (!(await ownedEventId(session.user.id, eventId)))
+    return { error: "Event not found." };
+
+  const existing = await db
+    .select({ slug: shares.slug })
+    .from(shares)
+    .where(eq(shares.eventId, eventId))
+    .limit(1);
+  if (existing.length > 0) return { slug: existing[0].slug };
+
+  const slug = randomBytes(9).toString("base64url");
+  await db.insert(shares).values({ eventId, slug, role: "family" });
+  revalidatePath(`/dashboard/events/${eventId}`);
+  return { slug };
+}
+
+export async function revokeShareAction(
+  eventId: string,
+): Promise<{ error?: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { error: "Not signed in." };
+  if (!(await ownedEventId(session.user.id, eventId)))
+    return { error: "Event not found." };
+
+  await db.delete(shares).where(eq(shares.eventId, eventId));
+  revalidatePath(`/dashboard/events/${eventId}`);
   return {};
 }

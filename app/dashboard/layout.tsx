@@ -14,7 +14,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex flex-1 flex-col bg-stone-50 dark:bg-stone-950">
-      <header className="border-b border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
+      <header className="no-print border-b border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <Link
             href="/dashboard"
