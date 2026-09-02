@@ -166,13 +166,17 @@ async function fetchGeminiWithRetry(url: string, init: RequestInit): Promise<Res
 }
 
 async function callGemini(prompt: string): Promise<unknown> {
+  const apiKey = process.env.GEMINI_API_KEY ?? "";
+  // Send the key both as header and query param: Google's new AQ.-format
+  // keys have been seen failing header-only auth on this endpoint (the API
+  // then hides the model, surfacing as 404), while ?key= works.
   const res = await fetchGeminiWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY ?? "",
+        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt() }] },
