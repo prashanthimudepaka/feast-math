@@ -17,5 +17,40 @@ services:
       timeout: 3s
       retries: 12
 
+  # One-shot: applies drizzle migrations, then exits; app waits for it.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://feast:feast@db:5432/feastmath
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: run
+    restart: unless-stopped
+    container_name: feastmath-app
+    environment:
+      DATABASE_URL: postgresql://feast:feast@db:5432/feastmath
+      BETTER_AUTH_URL: http://localhost:3000
+      # Loopback-only local stack; override via .env for anything shared.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-docker-dev-secret-change-me}
+      # Mock plans by default so the stack runs with zero API keys;
+      # set GEMINI_API_KEY in .env and FEAST_MOCK_PLAN=0 to go real.
+      FEAST_MOCK_PLAN: ${FEAST_MOCK_PLAN:-1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   feastmath_pgdata:

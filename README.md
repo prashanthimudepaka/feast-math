@@ -8,6 +8,8 @@ per-dish cooking quantities, an aggregated shopping list rounded to real pack
 sizes, a backwards-planned cooking timeline, and a leftover plan. Knowledge that
 normally lives only in a caterer's head.
 
+**Live**: https://event-planner-ruddy-omega.vercel.app
+
 ## Why it's built the way it is
 
 LLMs are good at *judgment* and bad at *arithmetic*, so Feast Math splits the job:
@@ -30,6 +32,17 @@ instead of overwriting history.
 Next.js 16 (App Router, TypeScript, Tailwind 4) · Better Auth (email/password +
 optional Google) · Drizzle ORM · PostgreSQL 17 (Docker) · Gemini API · Zod
 
+## Run with Docker (one command)
+
+```bash
+docker compose up --build
+```
+
+Postgres 17, schema migrations, and the production-built app come up together
+at http://localhost:3000 — no Node.js needed on the host. Demo (mock) plans
+work with zero configuration; for real AI plans put `GEMINI_API_KEY=...` and
+`FEAST_MOCK_PLAN=0` in a local `.env`.
+
 ## Local development
 
 ```bash
@@ -50,7 +63,7 @@ demo mode that exercises the entire engine and UI with zero API calls.
 - ✅ Phase 2 — authentication (adversarially reviewed & hardened)
 - ✅ Phase 3 — event wizard, AI parameter generation, quantity engine,
   menu customization with enrichment notes, plan versioning, shopping checklist
-- ⏳ Phase 4 — share links, print view, polish
-- ⏳ Phase 5 — deploy to Vercel
-- ⏳ Phase 6 — multi-stage Dockerfile + one-command compose stack
+- ✅ Phase 4 — share links, print view, polish
+- ✅ Phase 5 — live on Vercel (Neon Postgres, Gemini free tier)
+- ✅ Phase 6 — multi-stage Dockerfile + one-command compose stack
 - 🔭 v2 — post-event feedback loop: predicted vs. actual consumption per dish

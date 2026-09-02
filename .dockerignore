@@ -1,0 +1,14 @@
+# Secrets must never enter image layers
+.env
+.env.*
+
+node_modules
+.next
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+README.md
+docs
+.claude
+*.log
