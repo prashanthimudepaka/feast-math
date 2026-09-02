@@ -67,7 +67,7 @@ export const eventInputSchema = z.object({
 
 export type EventInput = z.infer<typeof eventInputSchema>;
 
-// ---------- Claude's output: per-dish parameters (never final quantities) ----------
+// ---------- the model's output: per-dish parameters (never final quantities) ----------
 
 export const DISH_CATEGORIES = [
   "rice_main",

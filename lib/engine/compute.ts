@@ -109,7 +109,7 @@ export function computePlan(input: EventInput, params: PlanParams): ComputedPlan
   const leftovers: { dish: string; ideas: string[] }[] = [];
 
   for (const dish of params.dishes) {
-    // 1. Clamp Claude's per-adult rate against the anchor table.
+    // 1. Clamp the model's per-adult rate against the anchor table.
     const anchor = ANCHORS[dish.dishCategory];
     let perAdult = dish.perAdult;
     let clamped = false;
@@ -141,7 +141,7 @@ export function computePlan(input: EventInput, params: PlanParams): ComputedPlan
       }
     }
 
-    // 2. Deterministic quantity math (Claude never does this part).
+    // 2. Deterministic quantity math (the model never does this part).
     const effectiveGuests = input.adults + input.kids * dish.kidFactor;
     const raw = perAdult * effectiveGuests * appetiteMult * styleMult * SAFETY_BUFFER;
     const value =

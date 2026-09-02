@@ -14,6 +14,10 @@ import { generatePlanParams } from "@/lib/ai/generate-params";
 import { computePlan } from "@/lib/engine/compute";
 import { eventInputSchema, type EventInput } from "@/lib/plan/types";
 
+// Real LLM calls (plus one validation retry) can exceed the default
+// serverless budget; mock mode never gets near this.
+export const maxDuration = 60;
+
 const DAILY_GENERATION_LIMIT = 10;
 
 export async function POST(
@@ -26,7 +30,7 @@ export async function POST(
   }
 
   // Mock mode needs no API key — only block real-API mode without one.
-  if (!process.env.ANTHROPIC_API_KEY && process.env.FEAST_MOCK_PLAN !== "1") {
+  if (!process.env.GEMINI_API_KEY && process.env.FEAST_MOCK_PLAN !== "1") {
     return NextResponse.json(
       { error: "Plan generation is not configured (missing API key)." },
       { status: 503 },
@@ -158,11 +162,29 @@ export async function POST(
   } catch (err) {
     console.error("[feast-math] plan generation failed:", err);
     const message = err instanceof Error ? err.message : "";
-    if (message.includes("credit balance")) {
+    if (/API key not valid|API_KEY_INVALID|PERMISSION_DENIED/i.test(message)) {
       return NextResponse.json(
         {
           error:
-            "The Anthropic account behind this app has no API credits. Add credits at console.anthropic.com → Plans & Billing, or enable demo mode (FEAST_MOCK_PLAN=1).",
+            "The Gemini API key is invalid. Re-copy it from aistudio.google.com → Get API key, or enable demo mode (FEAST_MOCK_PLAN=1).",
+        },
+        { status: 502 },
+      );
+    }
+    if (/RESOURCE_EXHAUSTED|quota/i.test(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "The free Gemini quota is exhausted for now. Try again in a minute (rate limit) or tomorrow (daily quota).",
+        },
+        { status: 502 },
+      );
+    }
+    if (/blocked the prompt|stopped generation/i.test(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "The AI declined this request (content filter). Adjust unusual dish names or notes and try again.",
         },
         { status: 502 },
       );

@@ -5,8 +5,8 @@ type DishCat = (typeof DISH_CATEGORIES)[number];
 
 // Offline demo mode (FEAST_MOCK_PLAN=1): produces structurally identical,
 // plausible parameters without calling the API. Used for development and
-// demos; real generations replace this the moment an API key with credits
-// is configured and the flag is off.
+// demos; real generations replace this the moment a Gemini API key is
+// configured and the flag is off.
 
 const KEYWORDS: [RegExp, DishCat][] = [
   [/biryani/i, "biryani"],
@@ -83,7 +83,7 @@ export function mockPlanParams(input: EventInput): PlanParams {
       };
     }),
     generalNotes: [
-      "This is an OFFLINE DEMO plan (mock mode). Add Anthropic API credits and unset FEAST_MOCK_PLAN for real AI-calibrated parameters.",
+      "This is an OFFLINE DEMO plan (mock mode). Add a free Gemini API key (aistudio.google.com) and unset FEAST_MOCK_PLAN for real AI-calibrated parameters.",
     ],
   };
 }

@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { anchorTableForPrompt } from "@/lib/engine/anchors";
 import {
   DISH_CATEGORIES,
@@ -8,9 +7,13 @@ import {
   type PlanParams,
 } from "@/lib/plan/types";
 
-export const PLAN_MODEL = "claude-opus-5";
+// Google AI Studio free tier — no card required, ~250 requests/day on flash,
+// far above this app's own 10-generations/day rate limit.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-const TOOL_INPUT_SCHEMA = {
+// JSON Schema for the model's output. Gemini receives it verbatim in the
+// system instruction; zod (planParamsSchema) is the actual enforcement.
+const PARAMS_JSON_SCHEMA = {
   type: "object" as const,
   properties: {
     dishes: {
@@ -105,18 +108,126 @@ If your instinct falls outside a range, use the nearest bound and explain in "no
 8. Some menu dishes carry a per-dish "note" — the host's customization (e.g., "extra ghee", "less spicy", "premium version with cashews and saffron"). Honor it: adjust the ingredient list (add/upgrade items), rates where relevant, and acknowledge the customization in that dish's "note" field.
 9. confidence: "high" for staple function dishes you know cold, "medium"/"low" for unusual dishes or contexts.
 
-Return the parameters ONLY by calling the submit_plan_parameters tool, with one entry per menu dish using EXACTLY the given dish names.`;
+Respond with ONLY one JSON object — no markdown fences, no commentary — that validates against this JSON Schema, with one dishes entry per menu dish using EXACTLY the given dish names:
+${JSON.stringify(PARAMS_JSON_SCHEMA)}`;
+}
+
+/** The model produced unusable output (empty, invalid JSON) — the loop
+ * retries once with this message as feedback. Real API failures (bad key,
+ * quota, network) are NOT this error and propagate to the route. */
+class ModelOutputError extends Error {}
+
+/** Some models wrap JSON in markdown fences despite instructions. */
+function stripFences(s: string): string {
+  const m = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(s.trim());
+  return m ? m[1] : s.trim();
+}
+
+// 2.5 Flash variants think by default, and thinking tokens share the output
+// budget (finishReason MAX_TOKENS with truncated/empty JSON). Budget 0 turns
+// thinking off — but only flash/flash-lite accept 0, and models without
+// thinking reject thinkingConfig outright, so gate on the model name.
+const canDisableThinking = /gemini-2\.5-flash/.test(GEMINI_MODEL);
+
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Transient 429/5xx and network blips get up to 2 backed-off retries (the
+ * Anthropic SDK did this automatically; plain fetch must). Client errors
+ * (400/401/403) throw immediately so the route's key/quota mapping fires. */
+async function fetchGeminiWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (err) {
+      if (attempt >= 2) throw err;
+      await sleep(500 * 2 ** attempt + Math.random() * 250);
+      continue;
+    }
+    if (res.ok) return res;
+    const body = (await res.text()).slice(0, 500);
+    if (attempt < 2 && RETRYABLE_STATUS.has(res.status)) {
+      // Honor small Retry-After hints; free-tier 429s can ask for tens of
+      // seconds, which would blow the route budget — fall back to backoff.
+      const retryAfter = Number(res.headers.get("retry-after"));
+      await sleep(
+        retryAfter > 0 && retryAfter <= 5
+          ? retryAfter * 1000
+          : 500 * 2 ** attempt + Math.random() * 250,
+      );
+      continue;
+    }
+    throw new Error(`Gemini API error ${res.status}: ${body}`);
+  }
+}
+
+async function callGemini(prompt: string): Promise<unknown> {
+  const res = await fetchGeminiWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": process.env.GEMINI_API_KEY ?? "",
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt() }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.3,
+          // No maxOutputTokens: the model's own ceiling is the safest cap
+          // across overridable models; the schema already bounds the JSON.
+          ...(canDisableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        },
+      }),
+    },
+  );
+  const data = (await res.json()) as {
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      finishReason?: string;
+    }[];
+    promptFeedback?: { blockReason?: string };
+  };
+
+  // A blocked prompt fails identically on retry — plain Error skips it.
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked the prompt (${data.promptFeedback.blockReason}).`);
+  }
+
+  const candidate = data.candidates?.[0];
+  const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+  if (text) {
+    try {
+      return JSON.parse(stripFences(text));
+    } catch {
+      // fall through to the finishReason-aware errors below
+    }
+  }
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new ModelOutputError(
+      "response was truncated at the output token limit — return more compact JSON (shorter notes, fewer leftover ideas)",
+    );
+  }
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    throw new Error(`Gemini stopped generation (${candidate.finishReason}).`);
+  }
+  throw new ModelOutputError(text ? "response was not valid JSON" : "empty response");
 }
 
 export async function generatePlanParams(
   input: EventInput,
 ): Promise<{ params: PlanParams; model: string }> {
+  // Offline demo mode wins over everything: zero API calls, zero cost.
   if (process.env.FEAST_MOCK_PLAN === "1") {
     const { mockPlanParams } = await import("./mock-params");
     return { params: mockPlanParams(input), model: "mock (offline demo)" };
   }
-
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const userPayload = {
     eventType: input.eventType,
@@ -134,34 +245,20 @@ export async function generatePlanParams(
     const prompt =
       attempt === 0
         ? basePrompt
-        : `${basePrompt}\n\nYour previous response failed validation with: ${lastError}\nCorrect these issues and call the tool again.`;
+        : `${basePrompt}\n\nYour previous response failed validation with: ${lastError}\nCorrect these issues and respond again.`;
 
-    const message = await client.messages.create({
-      model: PLAN_MODEL,
-      max_tokens: 16000,
-      system: systemPrompt(),
-      messages: [{ role: "user", content: prompt }],
-      tools: [
-        {
-          name: "submit_plan_parameters",
-          description:
-            "Submit per-adult consumption rates, ingredients, prep steps and leftover ideas for every dish on the menu.",
-          input_schema: TOOL_INPUT_SCHEMA,
-        },
-      ],
-      tool_choice: {
-        type: "tool",
-        name: "submit_plan_parameters",
-        disable_parallel_tool_use: true,
-      },
-    });
-
-    const toolUse = message.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
-      lastError = "no tool call in response";
-      continue;
+    let candidate: unknown;
+    try {
+      candidate = await callGemini(prompt);
+    } catch (err) {
+      if (err instanceof ModelOutputError) {
+        lastError = err.message;
+        continue;
+      }
+      throw err;
     }
-    const parsed = planParamsSchema.safeParse(toolUse.input);
+
+    const parsed = planParamsSchema.safeParse(candidate);
     if (!parsed.success) {
       lastError = parsed.error.issues
         .slice(0, 5)
@@ -185,7 +282,7 @@ export async function generatePlanParams(
       continue;
     }
 
-    return { params: parsed.data, model: PLAN_MODEL };
+    return { params: parsed.data, model: GEMINI_MODEL };
   }
   throw new Error(`The model's plan parameters failed validation: ${lastError}`);
 }

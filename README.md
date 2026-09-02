@@ -12,8 +12,8 @@ normally lives only in a caterer's head.
 
 LLMs are good at *judgment* and bad at *arithmetic*, so Feast Math splits the job:
 
-- **Claude (`claude-opus-5`)** outputs per-average-adult consumption *rates* per
-  dish via a forced tool call — never final quantities — adjusted for menu
+- **An LLM (Gemini, structured JSON output)** provides per-average-adult
+  consumption *rates* per dish — never final quantities — adjusted for menu
   breadth, region, and per-dish "enrichment" notes (e.g. *extra ghee, less spicy*).
 - **A deterministic TypeScript engine** does all the math: guest counts, kid
   factors, appetite/serving-style multipliers, a caterer-style safety buffer,
@@ -28,7 +28,7 @@ instead of overwriting history.
 ## Stack
 
 Next.js 16 (App Router, TypeScript, Tailwind 4) · Better Auth (email/password +
-optional Google) · Drizzle ORM · PostgreSQL 17 (Docker) · Anthropic SDK · Zod
+optional Google) · Drizzle ORM · PostgreSQL 17 (Docker) · Gemini API · Zod
 
 ## Local development
 
@@ -40,8 +40,9 @@ npm run db:migrate
 npm run dev                  # http://localhost:3000
 ```
 
-No Anthropic API credits yet? Set `FEAST_MOCK_PLAN=1` in `.env.local` for a free
-offline demo mode that exercises the entire engine and UI.
+Real AI plans need a free Gemini key from [aistudio.google.com](https://aistudio.google.com)
+(`GEMINI_API_KEY` in `.env.local`). Or set `FEAST_MOCK_PLAN=1` for an offline
+demo mode that exercises the entire engine and UI with zero API calls.
 
 ## Status
 

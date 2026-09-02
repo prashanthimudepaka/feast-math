@@ -27,8 +27,9 @@ GitHub (this doc); Docker packages the same app as a container (Phase 6).
 |---|---|---|
 | `BETTER_AUTH_SECRET` | fresh random value | generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` — do NOT reuse the dev one |
 | `BETTER_AUTH_URL` | `https://<your-app>.vercel.app` | set after the first deploy shows the URL, then redeploy |
-| `ANTHROPIC_API_KEY` | your key | only once the account has API credits |
-| `FEAST_MOCK_PLAN` | `1` | keep `1` until credits exist — the live demo then costs ₹0; remove and redeploy to go real |
+| `GEMINI_API_KEY` | your key | free from aistudio.google.com → Get API key (no card); ~250 requests/day on the free tier |
+| `GEMINI_MODEL` | optional | defaults to `gemini-2.5-flash` |
+| `FEAST_MOCK_PLAN` | `1` | offline demo plans with zero API calls; remove (and redeploy) once `GEMINI_API_KEY` is set to go real |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | enables Google sign-in; add the Vercel URL to the OAuth client's redirect URIs: `https://<app>.vercel.app/api/auth/callback/google` |
 
 ## 4. Migrations (run locally, once per schema change)

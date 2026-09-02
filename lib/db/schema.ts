@@ -64,7 +64,7 @@ export const plans = pgTable(
       .references(() => events.id, { onDelete: "cascade" }),
     version: integer("version").notNull(),
     inputSnapshot: jsonb("input_snapshot").notNull(), // event + menu as sent to the model
-    params: jsonb("params").notNull(), // Claude's per-dish rates & multipliers
+    params: jsonb("params").notNull(), // the model's per-dish rates & multipliers
     computed: jsonb("computed").notNull(), // deterministic engine output: quantities, ranges, timeline, leftovers
     model: text("model").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -1,7 +1,7 @@
 import type { DISH_CATEGORIES } from "@/lib/plan/types";
 
 // Caterer anchor table: sane per-average-adult COOKED amounts for one dish
-// inside a MULTI-DISH function meal. Claude is shown this table and asked to
+// inside a MULTI-DISH function meal. The model is shown this table and asked to
 // adjust within it; the engine clamps anything that escapes these bounds.
 // Sources: institutional/bulk-cooking rules of thumb.
 
