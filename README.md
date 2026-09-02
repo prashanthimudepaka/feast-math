@@ -40,8 +40,11 @@ docker compose up --build
 
 Postgres 17, schema migrations, and the production-built app come up together
 at http://localhost:3000 — no Node.js needed on the host. Demo (mock) plans
-work with zero configuration; for real AI plans put `GEMINI_API_KEY=...` and
-`FEAST_MOCK_PLAN=0` in a local `.env`.
+work with zero configuration. All overrides go in a local `.env` (Compose
+never reads `.env.local`): `GEMINI_API_KEY` + `FEAST_MOCK_PLAN=0` for real AI
+plans, `BETTER_AUTH_SECRET` to share sessions with `npm run dev`, and
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` for Google sign-in (add
+`http://localhost:3000/api/auth/callback/google` to the OAuth client).
 
 ## Local development
 

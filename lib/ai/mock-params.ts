@@ -83,7 +83,7 @@ export function mockPlanParams(input: EventInput): PlanParams {
       };
     }),
     generalNotes: [
-      "This is an OFFLINE DEMO plan (mock mode). Add a free Gemini API key (aistudio.google.com) and unset FEAST_MOCK_PLAN for real AI-calibrated parameters.",
+      "This is an OFFLINE DEMO plan (mock mode). Add a free Gemini API key (aistudio.google.com) and set FEAST_MOCK_PLAN=0 for real AI-calibrated parameters.",
     ],
   };
 }

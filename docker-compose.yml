@@ -12,10 +12,14 @@ services:
     volumes:
       - feastmath_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U feast -d feastmath"]
+      # Probe over TCP: on a fresh volume the postgres entrypoint runs a
+      # socket-only bootstrap server first, which a socket probe would pass
+      # prematurely — migrate would then hit ECONNREFUSED on db:5432.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U feast -d feastmath"]
       interval: 5s
       timeout: 3s
       retries: 12
+      start_period: 10s
 
   # One-shot: applies drizzle migrations, then exits; app waits for it.
   migrate:
@@ -37,13 +41,18 @@ services:
     environment:
       DATABASE_URL: postgresql://feast:feast@db:5432/feastmath
       BETTER_AUTH_URL: http://localhost:3000
-      # Loopback-only local stack; override via .env for anything shared.
+      # Compose reads .env only (NOT .env.local) for these overrides.
+      # Mirror BETTER_AUTH_SECRET into .env to share login sessions with
+      # `npm run dev` (same origin, same database).
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-docker-dev-secret-change-me}
       # Mock plans by default so the stack runs with zero API keys;
       # set GEMINI_API_KEY in .env and FEAST_MOCK_PLAN=0 to go real.
       FEAST_MOCK_PLAN: ${FEAST_MOCK_PLAN:-1}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-}
+      # Optional Google OAuth (see .env.example); empty stays disabled.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
