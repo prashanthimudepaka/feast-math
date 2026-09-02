@@ -7,9 +7,11 @@ import {
   type PlanParams,
 } from "@/lib/plan/types";
 
-// Google AI Studio free tier — no card required, ~250 requests/day on flash,
-// far above this app's own 10-generations/day rate limit.
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// Google AI Studio free tier — no card required, generous daily quota,
+// far above this app's own 10-generations/day rate limit. Note: 2.5-era
+// flash models are closed to new accounts (the API 404s with "no longer
+// available to new users"); 3.6-flash is Google's stated replacement.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 // JSON Schema for the model's output. Gemini receives it verbatim in the
 // system instruction; zod (planParamsSchema) is the actual enforcement.
