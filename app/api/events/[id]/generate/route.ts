@@ -193,6 +193,9 @@ export async function POST(
       {
         error:
           "Plan generation failed. Please try again in a moment — your menu and event are saved.",
+        // Provider error passthrough for the event owner (this route is
+        // auth-gated); Google error bodies carry no secrets.
+        detail: message.slice(0, 300),
       },
       { status: 502 },
     );
